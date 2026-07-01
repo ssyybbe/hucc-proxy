@@ -12,8 +12,8 @@ const CORS_ORIGIN = 'https://cdn01.demo.hermes.vocalcom.com';
 // Stockage de la session Creatio côté serveur
 // ============================================================
 var creatioSession = {
-    cookies: null,   // string de cookies à réinjecter
-    bpmcsrf: null    // token CSRF
+    cookies: null,
+    bpmcsrf: null
 };
 
 // ============================================================
@@ -47,14 +47,12 @@ app.post('/ServiceModel/AuthService.svc/Login', async (req, res) => {
         let cookieStrings = [];
 
         rawCookies.forEach(cookie => {
-            // Extraire le BPMCSRF
             if (cookie.includes('BPMCSRF=')) {
                 const match = cookie.match(/BPMCSRF=([^;]+)/);
-                if (match) bpmcsrf = match[1];
+                if (match) bpmcsrf = match[1].trim();
             }
-            // Garder uniquement nom=valeur pour les requêtes suivantes
-            cookieStrings.push(cookie.split(';')[0]);
-            // Transmettre le cookie au navigateur
+            const nameValue = cookie.split(';')[0].trim();
+            if (nameValue) cookieStrings.push(nameValue);
             res.append('Set-Cookie', cookie);
         });
 
@@ -63,9 +61,8 @@ app.post('/ServiceModel/AuthService.svc/Login', async (req, res) => {
         creatioSession.bpmcsrf = bpmcsrf;
 
         console.log("Login OK - BPMCSRF:", bpmcsrf);
-        console.log("Session cookies:", creatioSession.cookies);
+        console.log("Session cookies stockés:", creatioSession.cookies ? "OUI" : "NON");
 
-        // Injecter BPMCSRF dans le body
         res.json({ ...data, BPMCSRF: bpmcsrf });
 
     } catch (err) {
@@ -82,19 +79,22 @@ app.use('/', createProxyMiddleware({
     changeOrigin: true,
     on: {
         proxyReq: function(proxyReq, req) {
-            // Injecter les cookies de session Creatio
+            console.log("Proxy reçoit:", req.method, req.url);
+            console.log("Session dispo:", creatioSession.cookies ? "OUI" : "NON");
+
             if (creatioSession.cookies) {
                 proxyReq.setHeader('Cookie', creatioSession.cookies);
-                console.log("Proxy → Cookie injecté pour", req.url);
+                console.log("Cookie injecté ✅");
+            } else {
+                console.log("Pas de session ❌");
             }
-            // Injecter le BPMCSRF si présent dans la requête
-            if (req.headers['bpmcsrf']) {
-                proxyReq.setHeader('BPMCSRF', req.headers['bpmcsrf']);
-            } else if (creatioSession.bpmcsrf) {
+
+            if (creatioSession.bpmcsrf) {
                 proxyReq.setHeader('BPMCSRF', creatioSession.bpmcsrf);
             }
         },
-        proxyRes: function(proxyRes) {
+        proxyRes: function(proxyRes, req, res) {
+            console.log("Proxy réponse:", proxyRes.statusCode, req.url);
             delete proxyRes.headers['access-control-allow-origin'];
         }
     }
