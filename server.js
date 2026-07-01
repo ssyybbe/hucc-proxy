@@ -9,7 +9,15 @@ const CREATIO_URL = 'https://dev-westlakeplastics.creatio.com';
 const CORS_ORIGIN = 'https://cdn01.demo.hermes.vocalcom.com';
 
 // ============================================================
-// CORS : autoriser les appels depuis Vocalcom
+// Stockage de la session Creatio côté serveur
+// ============================================================
+var creatioSession = {
+    cookies: null,   // string de cookies à réinjecter
+    bpmcsrf: null    // token CSRF
+};
+
+// ============================================================
+// CORS
 // ============================================================
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", CORS_ORIGIN);
@@ -21,7 +29,7 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
-// LOGIN : intercepté pour extraire le BPMCSRF et le mettre dans le body
+// LOGIN : intercepté pour stocker la session côté proxy
 // ============================================================
 app.post('/ServiceModel/AuthService.svc/Login', async (req, res) => {
     try {
@@ -33,23 +41,31 @@ app.post('/ServiceModel/AuthService.svc/Login', async (req, res) => {
         });
 
         const data = await creatioRes.json();
-
-        // Lire les cookies de la réponse Creatio
         const rawCookies = creatioRes.headers.raw()['set-cookie'] || [];
+
         let bpmcsrf = null;
+        let cookieStrings = [];
 
         rawCookies.forEach(cookie => {
+            // Extraire le BPMCSRF
             if (cookie.includes('BPMCSRF=')) {
                 const match = cookie.match(/BPMCSRF=([^;]+)/);
                 if (match) bpmcsrf = match[1];
             }
+            // Garder uniquement nom=valeur pour les requêtes suivantes
+            cookieStrings.push(cookie.split(';')[0]);
             // Transmettre le cookie au navigateur
             res.append('Set-Cookie', cookie);
         });
 
-        console.log("Login - Code:", data.Code, "| BPMCSRF:", bpmcsrf);
+        // Stocker la session côté proxy
+        creatioSession.cookies = cookieStrings.join('; ');
+        creatioSession.bpmcsrf = bpmcsrf;
 
-        // Injecter BPMCSRF dans le body pour que le JS puisse le lire
+        console.log("Login OK - BPMCSRF:", bpmcsrf);
+        console.log("Session cookies:", creatioSession.cookies);
+
+        // Injecter BPMCSRF dans le body
         res.json({ ...data, BPMCSRF: bpmcsrf });
 
     } catch (err) {
@@ -59,20 +75,26 @@ app.post('/ServiceModel/AuthService.svc/Login', async (req, res) => {
 });
 
 // ============================================================
-// TOUT LE RESTE : proxy transparent vers Creatio
+// TOUT LE RESTE : proxy avec injection des cookies de session
 // ============================================================
 app.use('/', createProxyMiddleware({
     target: CREATIO_URL,
     changeOrigin: true,
     on: {
         proxyReq: function(proxyReq, req) {
-            // Transmettre le header BPMCSRF si présent
+            // Injecter les cookies de session Creatio
+            if (creatioSession.cookies) {
+                proxyReq.setHeader('Cookie', creatioSession.cookies);
+                console.log("Proxy → Cookie injecté pour", req.url);
+            }
+            // Injecter le BPMCSRF si présent dans la requête
             if (req.headers['bpmcsrf']) {
                 proxyReq.setHeader('BPMCSRF', req.headers['bpmcsrf']);
+            } else if (creatioSession.bpmcsrf) {
+                proxyReq.setHeader('BPMCSRF', creatioSession.bpmcsrf);
             }
         },
         proxyRes: function(proxyRes) {
-            // Supprimer le CORS de Creatio pour éviter les doublons
             delete proxyRes.headers['access-control-allow-origin'];
         }
     }
