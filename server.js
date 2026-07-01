@@ -18,7 +18,7 @@ app.use((req, res, next) => {
 
 // Tout proxifier vers Creatio
 app.use('/', createProxyMiddleware({
-    target: 'https://nds-pf1-demo.creatio.com',
+    target: 'https://dev-westlakeplastics.creatio.com',
     changeOrigin: true,
     on: {
         proxyRes: function(proxyRes) {
