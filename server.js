@@ -29,6 +29,16 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
+// PING : pour garder le proxy éveillé
+// ============================================================
+app.get('/ping', (req, res) => {
+    res.json({ 
+        status: "alive", 
+        session: creatioSession.cookies ? "OK" : "NON" 
+    });
+});
+
+// ============================================================
 // LOGIN : intercepté pour stocker la session côté proxy
 // ============================================================
 app.post('/ServiceModel/AuthService.svc/Login', async (req, res) => {
@@ -56,12 +66,11 @@ app.post('/ServiceModel/AuthService.svc/Login', async (req, res) => {
             res.append('Set-Cookie', cookie);
         });
 
-        // Stocker la session côté proxy
         creatioSession.cookies = cookieStrings.join('; ');
         creatioSession.bpmcsrf = bpmcsrf;
 
         console.log("Login OK - BPMCSRF:", bpmcsrf);
-        console.log("Session cookies stockés:", creatioSession.cookies ? "OUI" : "NON");
+        console.log("Session cookies stockés: OUI");
 
         res.json({ ...data, BPMCSRF: bpmcsrf });
 
@@ -93,7 +102,7 @@ app.use('/', createProxyMiddleware({
                 proxyReq.setHeader('BPMCSRF', creatioSession.bpmcsrf);
             }
         },
-        proxyRes: function(proxyRes, req, res) {
+        proxyRes: function(proxyRes, req) {
             console.log("Proxy réponse:", proxyRes.statusCode, req.url);
             delete proxyRes.headers['access-control-allow-origin'];
         }
