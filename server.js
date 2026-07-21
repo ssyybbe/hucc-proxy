@@ -191,7 +191,6 @@ app.post("/api/activities", async (req, res) => {
         const data = {
             "Title": "Appel entrant - " + callerNumber,
             "TypeId": "e1c59272-5001-4d72-8f62-a4dc6e91f345", // GUID type "Appel"
-            "PhoneNumber": callerNumber,
             "StartDate": new Date().toISOString(),
             "StatusId": "384d4ef6-55d6-df11-971b-001d60e938c6" // Statut "Terminé"
         };
