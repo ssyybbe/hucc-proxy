@@ -30,6 +30,7 @@ const cookieJar = new tough.CookieJar();
 const fetch = fetchCookie(nodeFetch, cookieJar);
 
 let bpmcsrfToken = null;
+let isAuthenticated = false;
 let loginInFlight = null;
 
 // ------------------------------------------------------------
@@ -52,10 +53,52 @@ async function loginCreatio() {
         if (data.Code !== 0) {
             throw new Error("Login Creatio échoué, code=" + data.Code);
         }
-        const cookies = await cookieJar.getCookies(CREATIO_BASE_URL);
-        const csrf = cookies.find(c => c.key === "BPMCSRF" || c.key === "CRT_CSRF");
-        bpmcsrfToken = csrf ? csrf.value : null;
-        console.log("CREATIO-PROXY : login OK, BPMCSRF =", bpmcsrfToken);
+
+        // On lit le BPMCSRF directement depuis les en-têtes Set-Cookie
+        // de LA RÉPONSE DE LOGIN (plus fiable que de repasser par le
+        // cookie-jar, qui peut mal résoudre le domaine/chemin selon
+        // la forme exacte de CREATIO_BASE_URL).
+        var rawSetCookies = [];
+        if (typeof res.headers.raw === "function") {
+            rawSetCookies = res.headers.raw()["set-cookie"] || [];
+        } else {
+            // fallback si "raw" n'est pas dispo (Headers standard ne renvoie
+            // qu'une valeur fusionnée pour get("set-cookie"))
+            var single = res.headers.get("set-cookie");
+            if (single) rawSetCookies = [single];
+        }
+        console.log("CREATIO-PROXY : Set-Cookie reçus →", rawSetCookies);
+
+        bpmcsrfToken = null;
+        for (var i = 0; i < rawSetCookies.length; i++) {
+            var m = rawSetCookies[i].match(/^(BPMCSRF|CRT_CSRF)=([^;]+)/);
+            if (m) {
+                bpmcsrfToken = m[2];
+                break;
+            }
+        }
+
+        if (!bpmcsrfToken) {
+            // Dernier recours : certains tenants ne renvoient le cookie
+            // BPMCSRF qu'après un premier appel authentifié (GET simple).
+            console.log("CREATIO-PROXY : BPMCSRF absent du login, tentative via un GET de secours...");
+            var probeRes = await fetch(CREATIO_BASE_URL + "/0/odata/SysSettings?$top=1");
+            var probeCookies = [];
+            if (typeof probeRes.headers.raw === "function") {
+                probeCookies = probeRes.headers.raw()["set-cookie"] || [];
+            }
+            console.log("CREATIO-PROXY : Set-Cookie du GET de secours →", probeCookies);
+            for (var j = 0; j < probeCookies.length; j++) {
+                var m2 = probeCookies[j].match(/^(BPMCSRF|CRT_CSRF)=([^;]+)/);
+                if (m2) {
+                    bpmcsrfToken = m2[2];
+                    break;
+                }
+            }
+        }
+
+        isAuthenticated = true;
+        console.log("CREATIO-PROXY : login OK, BPMCSRF =", bpmcsrfToken || "(aucun — protection CSRF désactivée sur cette instance)");
         return bpmcsrfToken;
     })();
 
@@ -67,7 +110,7 @@ async function loginCreatio() {
 }
 
 async function ensureAuth() {
-    if (!bpmcsrfToken) {
+    if (!isAuthenticated) {
         await loginCreatio();
     }
 }
@@ -80,7 +123,7 @@ async function creatioFetch(path, options = {}, retry = true) {
         { "Content-Type": "application/json", "Accept": "application/json" },
         options.headers || {}
     );
-    if (options.method && options.method !== "GET") {
+    if (options.method && options.method !== "GET" && bpmcsrfToken) {
         headers["BPMCSRF"] = bpmcsrfToken;
     }
 
@@ -89,6 +132,7 @@ async function creatioFetch(path, options = {}, retry = true) {
     if (res.status === 401 && retry) {
         console.log("CREATIO-PROXY : session expirée, re-login...");
         bpmcsrfToken = null;
+        isAuthenticated = false;
         await loginCreatio();
         return creatioFetch(path, options, false);
     }
