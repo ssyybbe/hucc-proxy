@@ -202,8 +202,9 @@ app.post("/api/activities", async (req, res) => {
             body: JSON.stringify(data)
         });
         if (!cRes.ok) {
-            console.error("CREATIO-PROXY : erreur création activité", cRes.status);
-            return res.status(cRes.status).json({ error: "création activité échouée" });
+            const errorBody = await cRes.text();
+            console.error("CREATIO-PROXY : erreur création activité", cRes.status, errorBody);
+            return res.status(cRes.status).json({ error: "création activité échouée", details: errorBody });
         }
 
         const created = await cRes.json();
