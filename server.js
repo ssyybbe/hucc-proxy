@@ -190,9 +190,9 @@ app.post("/api/activities", async (req, res) => {
         const { callerNumber, contactId } = req.body;
         const data = {
             "Title": "Appel entrant - " + callerNumber,
-            "TypeId": "e1c59272-5001-4d72-8f62-a4dc6e91f345", // GUID type "Appel"
+            "TypeId": "e1831dec-cfc0-df11-b00f-001d60e938c6", // Type "Appel entrant"
             "StartDate": new Date().toISOString(),
-            "StatusId": "384d4ef6-55d6-df11-971b-001d60e938c6" // Statut "Terminé"
+            "StatusId": "4bdbb88f-58e6-df11-971b-001d60e938c6" // Statut "Réalisé"
         };
         if (contactId) data.ContactId = contactId;
 
