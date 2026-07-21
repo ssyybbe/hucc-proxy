@@ -1,13 +1,17 @@
 {
-  "name": "hucc-proxy",
+  "name": "creatio-hucc-proxy",
   "version": "1.0.0",
+  "description": "Proxy server-to-server entre le widget HUCC Vocalcom et Creatio (contourne le CORS)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "http-proxy-middleware": "^2.0.6",
-    "node-fetch": "^2.7.0"
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "fetch-cookie": "^2.2.0",
+    "node-fetch": "^2.7.0",
+    "tough-cookie": "^4.1.4"
   }
 }
